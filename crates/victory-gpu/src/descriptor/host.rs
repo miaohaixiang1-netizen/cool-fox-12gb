@@ -3493,6 +3493,39 @@ macro_rules! once {
     }};
 }
 
+/// A texture view `desc` on a host copy that leaves out the title's
+/// `drop` largest levels (`crate::resource::drop_levels`): its levels
+/// shift down by as many ([`crate::resource::shift_levels`]). 2D textures,
+/// arrays and cubes only, the dimensions such copies have.
+fn shift_view_levels(drop: u32, desc: &mut D3D12_SHADER_RESOURCE_VIEW_DESC) {
+    if drop == 0 {
+        return;
+    }
+    let shift = crate::resource::shift_levels;
+    // SAFETY: each arm reads and writes the union member its dimension names.
+    unsafe {
+        match desc.ViewDimension {
+            D3D12_SRV_DIMENSION_TEXTURE2D => {
+                let t = &mut desc.Anonymous.Texture2D;
+                shift(drop, &mut t.MostDetailedMip, &mut t.MipLevels, &mut t.ResourceMinLODClamp);
+            }
+            D3D12_SRV_DIMENSION_TEXTURE2DARRAY => {
+                let t = &mut desc.Anonymous.Texture2DArray;
+                shift(drop, &mut t.MostDetailedMip, &mut t.MipLevels, &mut t.ResourceMinLODClamp);
+            }
+            D3D12_SRV_DIMENSION_TEXTURECUBE => {
+                let t = &mut desc.Anonymous.TextureCube;
+                shift(drop, &mut t.MostDetailedMip, &mut t.MipLevels, &mut t.ResourceMinLODClamp);
+            }
+            D3D12_SRV_DIMENSION_TEXTURECUBEARRAY => {
+                let t = &mut desc.Anonymous.TextureCubeArray;
+                shift(drop, &mut t.MostDetailedMip, &mut t.MipLevels, &mut t.ResourceMinLODClamp);
+            }
+            _ => {}
+        }
+    }
+}
+
 /// A view description from its words, with the format as the host has it.
 fn srv_desc(words: &[u32; 10]) -> D3D12_SHADER_RESOURCE_VIEW_DESC {
     let mut words = *words;
@@ -4243,6 +4276,9 @@ fn make_twinned(
                     && let Some(desc) = &mut desc
                 {
                     from_base(desc, copy.base);
+                    // The title may request more levels than remain after
+                    // the host copy was shortened. D3D12 rejects that view.
+                    clamp_view_mips(desc, u32::from(unsafe { texture.GetDesc() }.MipLevels));
                 }
                 // SAFETY: a live texture and a slot of our heap.
                 unsafe {
@@ -4396,6 +4432,39 @@ fn from_base(desc: &mut D3D12_SHADER_RESOURCE_VIEW_DESC, base: u32) {
         t.MipLevels = t.MipLevels.saturating_sub(lost).max(1);
     }
     t.ResourceMinLODClamp = (t.ResourceMinLODClamp - base as f32).max(0.0);
+}
+
+/// Keep a shortened texture's explicit SRV mip range within its host copy.
+fn clamp_view_mips(desc: &mut D3D12_SHADER_RESOURCE_VIEW_DESC, levels: u32) {
+    fn clamp(first: &mut u32, count: &mut u32, levels: u32) {
+        let levels = levels.max(1);
+        *first = (*first).min(levels - 1);
+        if *count != u32::MAX {
+            *count = (*count).clamp(1, levels - *first);
+        }
+    }
+    // SAFETY: each arm accesses the union member named by the dimension.
+    unsafe {
+        match desc.ViewDimension {
+            D3D12_SRV_DIMENSION_TEXTURE2D => {
+                let t = &mut desc.Anonymous.Texture2D;
+                clamp(&mut t.MostDetailedMip, &mut t.MipLevels, levels);
+            }
+            D3D12_SRV_DIMENSION_TEXTURE2DARRAY => {
+                let t = &mut desc.Anonymous.Texture2DArray;
+                clamp(&mut t.MostDetailedMip, &mut t.MipLevels, levels);
+            }
+            D3D12_SRV_DIMENSION_TEXTURECUBE => {
+                let t = &mut desc.Anonymous.TextureCube;
+                clamp(&mut t.MostDetailedMip, &mut t.MipLevels, levels);
+            }
+            D3D12_SRV_DIMENSION_TEXTURECUBEARRAY => {
+                let t = &mut desc.Anonymous.TextureCubeArray;
+                clamp(&mut t.MostDetailedMip, &mut t.MipLevels, levels);
+            }
+            _ => {}
+        }
+    }
 }
 
 /// Writes of a slot with another view of the placed texture it showed,
@@ -4858,6 +4927,19 @@ fn null_view(at: D3D12_CPU_DESCRIPTOR_HANDLE) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shortened_view_mip_range_fits_the_host_texture() {
+        let mut desc = srv_desc(&[98, 4, 5768, 0, 4, 5, 0, 0, 0, 0]);
+        from_base(&mut desc, 1);
+        clamp_view_mips(&mut desc, 7);
+        let t = unsafe { desc.Anonymous.Texture2D };
+        assert_eq!((t.MostDetailedMip, t.MipLevels), (3, 4));
+        let mut desc = srv_desc(&[98, 4, 5768, 0, 99, u32::MAX, 0, 0, 0, 0]);
+        clamp_view_mips(&mut desc, 7);
+        let t = unsafe { desc.Anonymous.Texture2D };
+        assert_eq!((t.MostDetailedMip, t.MipLevels), (6, u32::MAX));
+    }
 
     /// A view of a host copy that begins at a later level shows the same
     /// levels of it.

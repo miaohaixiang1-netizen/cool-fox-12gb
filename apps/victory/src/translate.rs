@@ -203,8 +203,18 @@ pub fn warm(paths: Vec<PathBuf>, file: &Path, jobs: Option<usize>) -> Result<()>
                                 counts[3].fetch_add(1, Ordering::Relaxed);
                                 break;
                             }
-                            if (!all && !wanted.contains(&hash)) || !lock(&done).insert(hash) {
+                            if (!all && !wanted.contains(&hash)) || !lock(&done).insert(hash.clone()) {
                                 continue;
+                            }
+                            // Optional local inspection of explicitly selected containers.
+                            if !all && let Some(dir) = std::env::var_os("VICTORY_WARM_CAPTURE") {
+                                let dir = PathBuf::from(dir);
+                                let _ = std::fs::create_dir_all(&dir);
+                                let _ = std::fs::write(dir.join(format!("{hash}.cdxil")), &bytes);
+                                if std::env::var_os("VICTORY_CAPTURE_ONLY").is_some() {
+                                    counts[0].fetch_add(1, Ordering::Relaxed);
+                                    continue;
+                                }
                             }
                             let n = counts[4].fetch_add(1, Ordering::Relaxed) + 1;
                             if n.is_multiple_of(1000) {
