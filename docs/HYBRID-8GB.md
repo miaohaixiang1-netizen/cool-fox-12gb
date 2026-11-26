@@ -23,7 +23,7 @@ XMA 音频修复、32 GB 常驻预算一并移植了进来（`8cc31ab`），并�
 pareto-residency 开关组。本分支在它之上再叠一层 8 GB 显存适配，
 三条线混在一起跑，故称混合版。
 
-## 二、相对上游的改动（5 个文件，+824 −11）
+## 二、相对上游的改动（代码 8 个文件，+897 −14；文档与工具另计）
 
 | 文件 | 改动 |
 |---|---|
@@ -32,6 +32,9 @@ pareto-residency 开关组。本分支在它之上再叠一层 8 GB 显存适配
 | `crates/victory-gpu/src/list.rs` | 拷贝 / 回读 / resolve 按 host 子资源重新编号；丢层数不同的纹理之间跳过拷贝 |
 | `crates/victory-gpu/src/descriptor/host.rs` | 着色器视图的起始层、层数、最小层钳制随丢层数平移 |
 | `apps/victory/src/translate.rs` | 预热（`warm`）路径跟随上述层映射 |
+| `crates/victory-shader/src/emit/lower.rs` | `scrub_nan`：NaN 与 ±∞ 换 0（`VICTORY_NAN_SCRUB`）；`with_loose_lds`：单 digest 的实验 wave64 翻译 |
+| `crates/victory-shader/src/emit/mod.rs` | 上述两个开关的接入点（实验那个按 digest `50cf2832…` 命中） |
+| `crates/victory-gpu/src/shader_cache.rs` | `VICTORY_NAN_SCRUB` 进 shader 缓存键 |
 
 **动机**（写在 `drop_levels` 的注释里）：N 卡上按索引挑选纹理时，内存预算先到，
 而排队等着的还有约 15 000 张；每帧 GPU 时间会翻三倍（上游在 RTX 4060 Ti 首房间的
@@ -43,6 +46,16 @@ pareto-residency 开关组。本分支在它之上再叠一层 8 GB 显存适配
 
 只对满足以下条件的纹理生效：title 自己填充的 2D 纹理、至少 512 texel、
 边长能被 `4 << N` 整除、至少 5 层 mip、非多重采样。数组纹理暂不处理。
+
+另有两个**默认关闭**的着色器开关（`crates/victory-shader/src/emit/`）：
+
+| 开关 | 作用 |
+|---|---|
+| `VICTORY_NAN_SCRUB=1` | 像素着色器写出的颜色、f32 图像存储里，NaN 与 ±∞ 一律改 0。一个坏值进 bloom/模糊/时序超分会扩散成留在历史里的黑色块（N 卡上脸与空气中的黑斑）；∞ 反过来把画面漂白。不同于主机行为，故做成开关 |
+| `VICTORY_EXPERIMENTAL_WAVE_02384=1` | 只对 digest `50cf2832…` 一个程序生效：允许分支内无序的跨半 wave LDS 读写再翻译。半 wave 可能看到过期 LDS 值，不是精确的 wave64 翻译，**仅供这一个程序** |
+
+`VICTORY_NAN_SCRUB` 进了 shader 缓存键（`victory-gpu/src/shader_cache.rs`），
+开关改变后不会吃到旧缓存的翻译；实验 wave 那个只按 digest 命中一个程序，暂未进键。
 
 ## 三、构建
 
@@ -92,6 +105,7 @@ $env:CONSOLE='series-s'; $env:VICTORY_TEXTURE_DROP_MIPS='1'
 | `VICTORY_MAP_THREADS` | 1 | 多线程映射 |
 | `VICTORY_AMBIENT` / `VICTORY_AMBIENT_AIR` | 0.8 / 1.5 | 没有光追时的亮度补偿 |
 | `VICTORY_CARD_BUFFERS_MIN_KB` | 64 | 小缓冲留在显存 |
+| `VICTORY_NAN_SCRUB` | 0/1 | 颜色与 f32 图像存储里的 NaN/±∞ 换 0，治 N 卡上的黑斑与漂白（默认关，见第二节） |
 
 其余上游开关见 `victory.example.toml` 与 `docs/`。
 
