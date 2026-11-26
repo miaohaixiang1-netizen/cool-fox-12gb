@@ -2696,7 +2696,9 @@ void main(uint3 g : SV_GroupID, uint i : SV_GroupIndex) {
             }
             sig.unwrap()
         };
-        // Three records of 65,535 x 16 groups: about half the budget each.
+        // Three records of 32,768 x 32 groups: 2^26 threads each, exactly
+        // half the budget, so two fill it to the last thread and the third
+        // runs empty (`VICTORY_INDIRECT_REST` off: it takes nothing).
         let Some((big, big_ptr)) = host.shared_buffer(3 * u64::from(STRIDE)) else {
             return;
         };
@@ -2709,7 +2711,7 @@ void main(uint3 g : SV_GroupID, uint i : SV_GroupIndex) {
         // SAFETY: mapped buffers of these sizes; nothing runs yet.
         unsafe {
             for i in 0..3 {
-                let words = [65535u32, 16, 1];
+                let words = [32768u32, 32, 1];
                 std::ptr::copy_nonoverlapping(
                     words.as_ptr().cast::<u8>(),
                     big_ptr.add(i * STRIDE as usize),
@@ -3153,9 +3155,18 @@ void main(uint3 group : SV_GroupID, uint3 thread : SV_DispatchThreadID) {
             return;
         };
         let pass = make_from(&warp.device, batch::SOURCE).expect("the batched clamp must compile on WARP");
-        const BUDGET: u32 = 1 << 27;
         // 2^26 vertices each, as much as a draw is let run: two fill it.
-        for (times, records, filled) in [(1u32, 3u64, 2usize), (2, 1, 1), (1, 1, 1), (3, 1, 0)] {
+        // `spent` is what the clamp leaves in the budget: one record read by
+        // `times` executions is charged for each, but a record that asks for
+        // more than the whole budget runs empty and, with
+        // `VICTORY_INDIRECT_REST` off (the default), takes nothing
+        // (`warp_a_record_that_does_not_fit_may_take_nothing`).
+        for (times, records, filled, spent) in [
+            (1u32, 3u64, 2usize, 1u32 << 27),
+            (2, 1, 1, 1 << 27),
+            (1, 1, 1, 1 << 26),
+            (3, 1, 0, 0),
+        ] {
             let (_src, src_ptr, src_gpu) = warp.shared_buffer(64 << 10);
             let (_budget, budget_ptr, budget_gpu) = warp.shared_buffer(256);
             let (back, back_ptr, _) = warp.shared_buffer(1024);
@@ -3184,7 +3195,7 @@ void main(uint3 group : SV_GroupID, uint3 thread : SV_DispatchThreadID) {
             }
             warp.submit_and_wait();
             // SAFETY: the list has run; mapped words.
-            let (spent, out): (u32, Vec<u32>) = unsafe {
+            let (charged, out): (u32, Vec<u32>) = unsafe {
                 (
                     budget_ptr.cast::<u32>().read_volatile(),
                     (0..records as usize).map(|r| back_ptr.cast::<u32>().add(r * batch::SLOT as usize / 4).read_volatile()).collect(),
@@ -3192,7 +3203,7 @@ void main(uint3 group : SV_GroupID, uint3 thread : SV_DispatchThreadID) {
             };
             assert_eq!(out.iter().filter(|&&v| v == 1 << 22).count(), filled, "{times} times {records}: {out:?}");
             assert!(out.iter().all(|&v| v == 0 || v == 1 << 22));
-            assert_eq!(spent, BUDGET.min((1 << 26) * times * records as u32));
+            assert_eq!(charged, spent, "{times} times {records}");
         }
     }
 

@@ -1219,6 +1219,13 @@ mod tests {
         let Some(host) = host() else {
             return;
         };
+        // A software rasterizer (WARP, the Basic Render Driver) reports the
+        // feature and takes the state, but does not reject the draw: what is
+        // under test is the hardware behaviour.
+        if host.software() {
+            eprintln!("software adapter: depth bounds does not filter there; skipped");
+            return;
+        }
         if !host.depth_bounds() {
             eprintln!("no host depth bounds support; skipped");
             return;

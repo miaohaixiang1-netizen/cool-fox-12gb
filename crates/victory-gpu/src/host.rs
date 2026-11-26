@@ -3986,6 +3986,21 @@ impl Host {
         })
     }
 
+    /// Whether the host is a software rasterizer (WARP, the Basic Render
+    /// Driver). It reports features like depth bounds and takes the state
+    /// for them, but does not act on them: the draw goes through.
+    #[cfg(test)]
+    pub(crate) fn software(&self) -> bool {
+        self.adapter.as_ref().is_some_and(|a| {
+            // SAFETY: a plain query on a live adapter.
+            unsafe {
+                a.cast::<IDXGIAdapter1>()
+                    .and_then(|a| a.GetDesc1())
+                    .is_ok_and(|d| d.Flags & DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32 != 0)
+            }
+        })
+    }
+
     /// Whether the host GPU supports the depth bounds test; logged once.
     pub(crate) fn depth_bounds(&self) -> bool {
         static BOUNDS: OnceLock<bool> = OnceLock::new();

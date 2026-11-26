@@ -136,7 +136,11 @@ unsafe fn patch_clzero(at: usize, code: &[u8]) -> bool {
         return false;
     };
     let mut stubs = STUBS.lock().unwrap_or_else(|e| e.into_inner());
-    if stubs.is_none() {
+    // One stub region is kept, but only for loops it can reach: the jump is a
+    // `jmp rel32`, so loops farther apart than that (the test's pages, or
+    // title code in another module) get a region of their own. The old one
+    // is left as it is: patches already made still jump into it.
+    if stubs.is_none_or(|(place, used)| jump(at, place + used).is_none()) {
         *stubs = near(at).map(|place| (place, 0));
     }
     let Some((place, used)) = stubs.as_mut() else {
