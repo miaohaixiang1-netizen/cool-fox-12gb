@@ -63,6 +63,8 @@ fn build() -> [u8; 32] {
         // served the translations an earlier run of the same
         // executable had cached with the switch unset.
         for name in [
+            // Colours and f32 image stores with NaN or an infinity made 0.
+            "VICTORY_NAN_SCRUB",
             "VICTORY_WAVE_WIDE",
             "VICTORY_WAVE_DEEP_SKIPS",
             "VICTORY_WAVE_OWN_BITS",
