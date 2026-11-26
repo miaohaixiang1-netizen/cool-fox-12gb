@@ -987,7 +987,7 @@ fn lds_meetings(p: &crate::ir::Program, st: &Structured, all: &[bool]) -> Option
             }
         }
     }
-    if (0..n).any(|r| reads[r] && writes[r]) {
+    if (0..n).any(|r| reads[r] && writes[r]) && !LDS_LOOSE.get() {
         return None;
     }
     let mut meet = vec![(false, false); n];
@@ -1054,6 +1054,16 @@ thread_local! {
     static LOCAL_WAVES: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     /// See [`with_local_waves_any`].
     static LOCAL_ANY: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    static LDS_LOOSE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Experimental: permit unordered cross-half LDS accesses inside a branch.
+/// Values can be stale; use only for an explicitly selected shader.
+pub(super) fn with_loose_lds<R>(f: impl FnOnce() -> R) -> R {
+    let was = LDS_LOOSE.replace(true);
+    let result = f();
+    LDS_LOOSE.set(was);
+    result
 }
 
 /// As [`with_local_waves`], with every other use of a lane mask as a number

@@ -638,6 +638,19 @@ pub fn emit(
                 }
             }
         }
+        // Restricted experiment for a program the prior 8 GB fork accepts.
+        // The halves may observe stale LDS values: this is not an exact
+        // wave64 translation and is disabled unless explicitly requested.
+        if local_on && !strict && !exact_only
+            && std::env::var_os("VICTORY_EXPERIMENTAL_WAVE_02384").is_some_and(|v| v == "1")
+            && c.digest == [0x50, 0xcf, 0x28, 0x32, 0x8b, 0x58, 0x05, 0x3d, 0xa8, 0x9a, 0x8d, 0xa0, 0x1a, 0xa1, 0x23, 0xc6]
+        {
+            let local = lower::with_loose_lds(|| lower::with_local_waves_any(|| emit_program(c, native, p, st, io, res)));
+            report("selected shader: approximate loose LDS", &local);
+            if done(&local) {
+                return local.map(|(shader, _)| shader);
+            }
+        }
     }
     // SCC of a mask operation joined with a scalar test behind a per-lane skip (the 32-lane
     // trace programs): right once the wave takes that skip together ([`widen`]; the
