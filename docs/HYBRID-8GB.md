@@ -115,8 +115,13 @@ $env:CONSOLE='series-s'; $env:VICTORY_TEXTURE_DROP_MIPS='1'
   场景更重、纹理张数从 1.6 万涨到 7.6 万。
 - **但帧数没涨**。两轮 draws 差 35%（4470 vs 6050），不是同场景 A/B，不能直接相减；
   同场景 `DROP_MIPS=0/1/3` 的对照还在跑，跑完补进来。
-- 真正的杠杆是像素数：早期 N 卡分支把世界按 540p 画、再由游戏超分到 1080p，
-  直接从 2.7 fps 到 7.7 fps。这台机器上 1080p 世界内就是 2–3 fps 的量级。
+- 7.70 fps 那行是早期 N 卡分支靠 **`RENDER_SCALE=0.5` 降低渲染分辨率**（540p 世界 +
+  游戏超分到 1080p）才做到的，不是代码更快。这台机器 1080p 真渲染的世界内就是 2–3 fps。
+- **参考系 CGBJ**（= codec-d/cool_fox，本仓库直接上游）：PortWatch 评分条目里写明
+  NVIDIA 平台「8GB 系统内存 + **16 GB 显存**」平均 25 fps、渲染率 0.85（同样是压渲染
+  分辨率）、稳定性 0.85，仍有轻微视觉故障、稳不住 30。本仓库在其上做 8 GB 显存适配。
+- **建议用 ≥ 12 GB 显存的卡验证丢层补丁**：8 GB 卡显存本身就是瓶颈（打满后 1.2–1.4 万个
+  纹理槽在等显存），丢层省下的显存副本会被其它瓶颈吃掉，测不出补丁真实收益。
 - 瓶颈不是算力：上游自述私有内存 40–46 GB、建议 64 GB，本机 31.6 GB，
   显存 8 GB 同时打满，页面文件与显存在 PCIe 上来回搬；日志里
   `the card has no room for more; they wait` 的纹理槽峰值 1.2–1.4 万个。
@@ -134,6 +139,7 @@ $env:CONSOLE='series-s'; $env:VICTORY_TEXTURE_DROP_MIPS='1'
 ## 八、上游与出处
 
 - 主线分支：<https://github.com/trustno1-coder/VIctory-NVIDIA>（N 卡专用，本分支的来路）
-- 直接上游：<https://github.com/codec-d/cool_fox>（`f4b48ad`，代码树取自这里）
+- 直接上游：<https://github.com/codec-d/cool_fox>（`f4b48ad`，代码树取自这里）；
+  在 PortWatch 的评分条目里它叫 **CGBJ**，当前 91.5% 可玩。
 - 再上游：<https://github.com/Marvisak/VIctory>、<https://github.com/avatarmanz/VIctory-7900XTX>
 - 许可：GPL-3.0-or-later（见 `LICENSE`）
