@@ -1,7 +1,9 @@
 > **8 GB 分支（本仓库）** — [trustno1-coder/VIctory-NVIDIA](https://github.com/trustno1-coder/VIctory-NVIDIA)
 > 这一路线下的分支，代码树取自 [codec-d/cool_fox](https://github.com/codec-d/cool_fox) 的 `f4b48ad`，
 > 并加了一组针对 8 GB 显存显卡的补丁：`VICTORY_TEXTURE_DROP_MIPS`
-> 丢掉 host 拷贝最大的若干 mip 层，上传、回读与着色器视图随之平移。构建、跑法与实测见
+> 丢掉 host 拷贝最大的若干 mip 层，上传、回读与着色器视图随之平移；另有默认关闭的
+> `VICTORY_NAN_SCRUB`（颜色与 f32 图像存储里的 NaN/±∞ 换 0，治 N 卡上的黑斑与漂白）。
+> 构建、跑法与实测见
 > **[docs/HYBRID-8GB.md](docs/HYBRID-8GB.md)**；`tools/` 下有启动脚本与性能浮层。
 > 以下是上游 README 原文。
 
