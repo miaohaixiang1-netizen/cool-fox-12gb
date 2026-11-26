@@ -60,6 +60,12 @@ collapsible_match = "allow"
 manual_clamp = "allow"
 implicit_saturating_sub = "allow"
 min_max = "allow"
+# Same, for the shapes the code already has: wide step signatures
+# (`land::piece_at`), a large enum (the host's `Late` queue) and a `from_*`
+# method that takes its receiver (`ResourceDesc::from_level`).
+too_many_arguments = "allow"
+large_enum_variant = "allow"
+wrong_self_convention = "allow"
 # Upstream warns on unsafe blocks without a SAFETY comment; eleven blocks in
 # this fork's newer GPU code still lack one.
 undocumented_unsafe_blocks = "allow"

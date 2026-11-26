@@ -3493,39 +3493,6 @@ macro_rules! once {
     }};
 }
 
-/// A texture view `desc` on a host copy that leaves out the title's
-/// `drop` largest levels (`crate::resource::drop_levels`): its levels
-/// shift down by as many ([`crate::resource::shift_levels`]). 2D textures,
-/// arrays and cubes only, the dimensions such copies have.
-fn shift_view_levels(drop: u32, desc: &mut D3D12_SHADER_RESOURCE_VIEW_DESC) {
-    if drop == 0 {
-        return;
-    }
-    let shift = crate::resource::shift_levels;
-    // SAFETY: each arm reads and writes the union member its dimension names.
-    unsafe {
-        match desc.ViewDimension {
-            D3D12_SRV_DIMENSION_TEXTURE2D => {
-                let t = &mut desc.Anonymous.Texture2D;
-                shift(drop, &mut t.MostDetailedMip, &mut t.MipLevels, &mut t.ResourceMinLODClamp);
-            }
-            D3D12_SRV_DIMENSION_TEXTURE2DARRAY => {
-                let t = &mut desc.Anonymous.Texture2DArray;
-                shift(drop, &mut t.MostDetailedMip, &mut t.MipLevels, &mut t.ResourceMinLODClamp);
-            }
-            D3D12_SRV_DIMENSION_TEXTURECUBE => {
-                let t = &mut desc.Anonymous.TextureCube;
-                shift(drop, &mut t.MostDetailedMip, &mut t.MipLevels, &mut t.ResourceMinLODClamp);
-            }
-            D3D12_SRV_DIMENSION_TEXTURECUBEARRAY => {
-                let t = &mut desc.Anonymous.TextureCubeArray;
-                shift(drop, &mut t.MostDetailedMip, &mut t.MipLevels, &mut t.ResourceMinLODClamp);
-            }
-            _ => {}
-        }
-    }
-}
-
 /// A view description from its words, with the format as the host has it.
 fn srv_desc(words: &[u32; 10]) -> D3D12_SHADER_RESOURCE_VIEW_DESC {
     let mut words = *words;
@@ -4426,12 +4393,7 @@ fn from_base(desc: &mut D3D12_SHADER_RESOURCE_VIEW_DESC, base: u32) {
     }
     // SAFETY: the member its dimension says.
     let t = unsafe { &mut desc.Anonymous.Texture2D };
-    let lost = base.saturating_sub(t.MostDetailedMip);
-    t.MostDetailedMip = t.MostDetailedMip.saturating_sub(base);
-    if t.MipLevels != u32::MAX {
-        t.MipLevels = t.MipLevels.saturating_sub(lost).max(1);
-    }
-    t.ResourceMinLODClamp = (t.ResourceMinLODClamp - base as f32).max(0.0);
+    crate::resource::shift_levels(base, &mut t.MostDetailedMip, &mut t.MipLevels, &mut t.ResourceMinLODClamp);
 }
 
 /// Keep a shortened texture's explicit SRV mip range within its host copy.

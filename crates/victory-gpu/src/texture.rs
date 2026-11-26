@@ -64,11 +64,14 @@ pub(crate) struct Staging {
     once: std::sync::atomic::AtomicBool,
     /// The title's levels the host texture leaves out
     /// (`crate::resource::drop_levels`): host level `m` is title level
-    /// `m + drop`.
+    /// `m + drop`. (Read by the upload-source shortening once it is wired:
+    /// see [`staging_layout`].)
+    #[allow(dead_code)]
     drop: u32,
     /// First mip to read from `layout` for host mip zero.
     first_mip: u32,
     /// Full title extent for the indexed upload budget and residency checks.
+    #[allow(dead_code)]
     title_bytes: usize,
     /// The staging buffer's bytes (counted in `STAGED` while it lives).
     bytes: u64,
@@ -1849,6 +1852,12 @@ pub(crate) fn mapped_bytes(at: *const u8, len: usize) -> u64 {
 /// allocation. Keep their original tiled offsets and tail placement while
 /// shortening the source that refreshes watch, copy and hash. Array slices
 /// have the original stride between their prefixes.
+///
+/// Written and unit-tested below, but not yet wired into [`staging`]: the
+/// live path keeps the full title layout and indexes it by title mip
+/// ([`Staging::first_mip`] is 0), which is correct. Wiring this is the
+/// upload-source part of the 8 GB work.
+#[allow(dead_code)]
 fn staging_layout(
     mut layout: victory_formats::texture::Layout,
     drop: u32,
@@ -2388,7 +2397,7 @@ mod allocation_costs {
                 seen.push(digest(&bytes));
             }
         }
-        let text: Vec<u8> = (0..400u32).map(|i| (i * 37 >> 2) as u8).collect();
+        let text: Vec<u8> = (0..400u32).map(|i| ((i * 37) >> 2) as u8).collect();
         for at in 0..399 {
             let mut bytes = text.clone();
             bytes.swap(at, at + 1);
